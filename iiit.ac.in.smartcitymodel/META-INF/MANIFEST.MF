@@ -1,0 +1,28 @@
+Manifest-Version: 1.0
+Automatic-Module-Name: iiit.ac.in.smartcitymodel
+Bundle-ManifestVersion: 2
+Bundle-Name: iiit.ac.in.smartcitymodel
+Bundle-Vendor: My Company
+Bundle-Version: 1.0.0.qualifier
+Bundle-SymbolicName: iiit.ac.in.smartcitymodel; singleton:=true
+Bundle-ActivationPolicy: lazy
+Require-Bundle: org.eclipse.xtext,
+ org.eclipse.xtext.xbase,
+ org.eclipse.equinox.common;bundle-version="3.19.0",
+ org.eclipse.emf.ecore,
+ org.eclipse.xtext.xbase.lib;bundle-version="2.39.0",
+ org.eclipse.emf.common,
+ org.antlr.runtime;bundle-version="[3.2.0,3.2.1)"
+Bundle-RequiredExecutionEnvironment: JavaSE-21
+Export-Package: iiit.ac.in.smartcitymodel.smartCityModel.util,
+ iiit.ac.in.smartcitymodel.validation,
+ iiit.ac.in.smartcitymodel.parser.antlr.internal,
+ iiit.ac.in.smartcitymodel.parser.antlr,
+ iiit.ac.in.smartcitymodel,
+ iiit.ac.in.smartcitymodel.scoping,
+ iiit.ac.in.smartcitymodel.generator,
+ iiit.ac.in.smartcitymodel.smartCityModel,
+ iiit.ac.in.smartcitymodel.smartCityModel.impl,
+ iiit.ac.in.smartcitymodel.services,
+ iiit.ac.in.smartcitymodel.serializer
+Import-Package: org.apache.log4j

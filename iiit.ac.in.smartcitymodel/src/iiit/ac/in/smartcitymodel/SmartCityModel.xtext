@@ -1,0 +1,56 @@
+grammar iiit.ac.in.smartcitymodel.SmartCityModel with org.eclipse.xtext.common.Terminals
+
+generate smartCityModel "http://www.iiit.ac.in/smartcitymodel/SmartCityModel"
+
+Model:
+    networks+=BacnetNetwork*
+    devices+=HvacDevice*
+    simulationProperties=SimulationProperties
+;
+
+// Physical Integration Layer (FastAPI requirements)
+BacnetNetwork:
+    'network' name=ID '{'
+        'virtualClientIP' virtualIP=STRING
+        'port' port=INT
+    '}'
+;
+
+// Asset Layer - Follows the 'Node' pattern
+HvacDevice:
+    'hvac' name=ID '{'
+        'ip' deviceIP=STRING
+        'vendor' vendor=STRING
+        objects+=BacnetObject*
+        actions+=Action*
+    '}'
+;
+
+// BACnet Objects - Follows the 'Sensor' pattern
+BacnetObject:
+    'object' name=ID '{'
+        'type' type=BacnetObjectType
+        'instance' instanceNum=INT
+        'priority' priority=INT 
+    '}'
+;
+
+// Logic/Behavior Layer
+Action:
+    'action' name=ID '{'
+        'trigger' trigger=STRING
+    '}'
+;
+
+// Simulation Layer - Exactly matching your existing pattern
+SimulationProperties:
+    'simulationProperties' '{'
+        'terminationTime' terminationTime=INT
+        ('generatorFile' generatorFile=STRING)?
+    '}'
+;
+
+enum BacnetObjectType:
+    ANALOG_INPUT | ANALOG_OUTPUT | ANALOG_VALUE | 
+    BINARY_INPUT | BINARY_OUTPUT | BINARY_VALUE
+;

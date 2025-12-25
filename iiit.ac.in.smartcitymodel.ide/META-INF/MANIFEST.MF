@@ -1,0 +1,15 @@
+Manifest-Version: 1.0
+Automatic-Module-Name: iiit.ac.in.smartcitymodel.ide
+Bundle-ManifestVersion: 2
+Bundle-Name: iiit.ac.in.smartcitymodel.ide
+Bundle-Vendor: My Company
+Bundle-Version: 1.0.0.qualifier
+Bundle-SymbolicName: iiit.ac.in.smartcitymodel.ide; singleton:=true
+Bundle-ActivationPolicy: lazy
+Require-Bundle: iiit.ac.in.smartcitymodel,
+ org.eclipse.xtext.ide,
+ org.eclipse.xtext.xbase.ide,
+ org.antlr.runtime;bundle-version="[3.2.0,3.2.1)"
+Bundle-RequiredExecutionEnvironment: JavaSE-21
+Export-Package: iiit.ac.in.smartcitymodel.ide.contentassist.antlr.internal,
+ iiit.ac.in.smartcitymodel.ide.contentassist.antlr

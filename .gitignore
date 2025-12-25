@@ -1,0 +1,59 @@
+# Eclipse metadata
+.metadata/
+.recommenders/
+RemoteSystemsTempFiles/
+
+# Eclipse project files (optional - some teams commit these)
+# Uncomment if you want to ignore them:
+# .project
+# .classpath
+# .settings/
+
+# Build outputs
+bin/
+target/
+test-bin/
+
+# Generated sources (Xtext/Xtend)
+**/src-gen/
+**/xtend-gen/
+**/model/generated/
+
+# Eclipse plugin builds
+*.jar
+*.class
+
+# Log files
+*.log
+*.log.*
+
+# OS specific files
+.DS_Store
+Thumbs.db
+*.swp
+*.bak
+*~
+
+# IDE specific
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.launch
+
+# Maven
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+
+# Gradle
+.gradle/
+build/
+
+# Temporary files
+*.tmp
+*.temp
