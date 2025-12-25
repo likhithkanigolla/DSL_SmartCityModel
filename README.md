@@ -186,6 +186,31 @@ Open example.smartcitymodel
 → Check src-gen/ folder
 ```
 
+1. **Right-click** on SmartCityModelGeneratorLauncher.java
+2. **Run As → Java Application**
+3. When it fails or asks for arguments, go to **Run Configurations**
+4. Add to **Program arguments:**
+   ```
+   ${workspace_loc}/iiit.ac.in.smartcitymodel/test.smartcitymodel ${workspace_loc}/iiit.ac.in.smartcitymodel/output
+   ```
+5. **Click Run**
+
+**That's the correct approach!** 
+
+However, note the file extension difference:
+- **Old project:** `.smartcity`
+- **Your project:** `.smartcitymodel`
+
+So the arguments should be:
+```
+${workspace_loc}/iiit.ac.in.smartcitymodel/test.smartcitymodel ${workspace_loc}/iiit.ac.in.smartcitymodel/output
+```
+
+Or with the full example:
+```
+${workspace_loc}/iiit.ac.in.smartcitymodel/example.smartcitymodel ${workspace_loc}/iiit.ac.in.smartcitymodel/output
+```
+
 Success indicators:
 
 * No errors in Problems view

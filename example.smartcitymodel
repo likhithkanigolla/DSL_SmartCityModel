@@ -1,82 +1,112 @@
-// Example BACnet HVAC DSL Model
-// This demonstrates a simple Daikin HVAC unit with BACnet objects
-
 network bacnet_network {
     virtualClientIP "192.168.1.100"
     port 47808
 }
 
-node daikin_hvac_unit1 {
+node hvac_unit1 {
     ip "192.168.1.50"
     vendor "Daikin"
-    
-    object temperature_sensor {
+
+    object timestamp {
         type ANALOG_INPUT
         instance 1
         priority 10
     }
-    
-    object humidity_sensor {
+    object room_temp {
         type ANALOG_INPUT
         instance 2
         priority 10
     }
-    
-    object setpoint_temp {
+    object temp_adjust {
         type ANALOG_OUTPUT
-        instance 1
-        priority 5
-    }
-    
-    object fan_status {
-        type BINARY_OUTPUT
-        instance 1
-        priority 8
-    }
-    
-    controller hvac_controller {
-        type HVAC_CONTROLLER
-        priority 1
-        
-        cyclicAction check_temperature {
-            frequency 5 SECONDS
-        }
-        
-        cyclicAction adjust_setpoint {
-            frequency 10 SECONDS
-        }
-    }
-    
-    postFrequency 1 SECONDS
-    priority 5
-}
-
-node daikin_hvac_unit2 {
-    ip "192.168.1.51"
-    vendor "Daikin"
-    
-    object temperature_sensor {
-        type ANALOG_INPUT
         instance 1
         priority 10
     }
-    
-    object setpoint_temp {
-        type ANALOG_OUTPUT
+    object start_stop_status {
+        type BINARY_INPUT
         instance 1
-        priority 5
+        priority 10
     }
-    
+    object alarm {
+        type BINARY_INPUT
+        instance 2
+        priority 10
+    }
+    object malfunction_code {
+        type MULTISTATE_INPUT
+        instance 1
+        priority 10
+    }
+    object air_con_mode_status {
+        type MULTISTATE_INPUT
+        instance 2
+        priority 10
+    }
+    object air_flow_rate_status {
+        type MULTISTATE_INPUT
+        instance 3
+        priority 10
+    }
+    object filter_sign {
+        type BINARY_INPUT
+        instance 3
+        priority 10
+    }
+    object gas_total_power {
+        type ACCUMULATOR
+        instance 1
+        priority 10
+    }
+    object elec_total_power {
+        type ACCUMULATOR
+        instance 2
+        priority 10
+    }
+    object air_direction_status {
+        type ANALOG_INPUT
+        instance 3
+        priority 10
+    }
+    object forced_thermo_off_status {
+        type BINARY_INPUT
+        instance 4
+        priority 10
+    }
+    object energy_efficiency_status {
+        type BINARY_INPUT
+        instance 5
+        priority 10
+    }
+    object thermo_status {
+        type BINARY_INPUT
+        instance 6
+        priority 10
+    }
+    object compressor_status {
+        type BINARY_INPUT
+        instance 7
+        priority 10
+    }
+    object indoor_fan_status {
+        type BINARY_INPUT
+        instance 8
+        priority 10
+    }
+    object heater_status {
+        type BINARY_INPUT
+        instance 9
+        priority 10
+    }
+
     controller hvac_controller {
         type HVAC_CONTROLLER
         priority 1
-        
         cyclicAction check_temperature {
             frequency 5 SECONDS
         }
     }
-    
-    postFrequency 2 SECONDS
+
+    postFrequency 1 SECONDS
     priority 5
 }
 

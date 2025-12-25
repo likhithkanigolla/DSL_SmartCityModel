@@ -62,6 +62,6 @@ SimulationProperties:
 Frequency: value=INT unit=FrequencyUnit;
 CyclicAction: 'cyclicAction' name=ID '{' 'frequency' frequency=Frequency '}';
 
-enum BacnetObjectType: ANALOG_INPUT | ANALOG_OUTPUT | BINARY_INPUT | BINARY_OUTPUT;
+enum BacnetObjectType: ANALOG_INPUT | ANALOG_OUTPUT | BINARY_INPUT | BINARY_OUTPUT | MULTISTATE_INPUT | ACCUMULATOR;
 enum ControllerType: ESP32 | RASPBERRY_PI | HVAC_CONTROLLER | OTHER;
 enum FrequencyUnit: HERTZ | SECONDS | MINUTES | HOURS | DAYS;
