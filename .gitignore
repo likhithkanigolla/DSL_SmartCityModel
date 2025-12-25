@@ -69,3 +69,10 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 dist/
+
+# PyDEVS generated files
+**/output/
+
+
+# Unnecessary docs 
+docs/
