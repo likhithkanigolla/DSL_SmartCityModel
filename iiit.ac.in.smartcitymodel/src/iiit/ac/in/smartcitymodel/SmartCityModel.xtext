@@ -4,11 +4,11 @@ generate smartCityModel "http://www.iiit.ac.in/smartcitymodel/SmartCityModel"
 
 Model:
     networks+=BacnetNetwork*
-    devices+=HvacDevice*
+    nodes+=Node*
     simulationProperties=SimulationProperties
 ;
 
-// Physical Integration Layer (FastAPI requirements)
+// Network configuration for FastAPI to reach the Physical System
 BacnetNetwork:
     'network' name=ID '{'
         'virtualClientIP' virtualIP=STRING
@@ -16,41 +16,52 @@ BacnetNetwork:
     '}'
 ;
 
-// Asset Layer - Follows the 'Node' pattern
-HvacDevice:
-    'hvac' name=ID '{'
+// The Node acts as the Digital Twin asset (e.g., Daikin HVAC Unit)
+Node:
+    'node' name=ID '{'
         'ip' deviceIP=STRING
-        'vendor' vendor=STRING
-        objects+=BacnetObject*
-        actions+=Action*
+        ('vendor' vendor=STRING)?
+        
+        // BACnet Objects (AI, AO, etc.) - replaces simple Sensors
+        bacnetObjects+=BacnetObject*
+        
+        // Behavioral logic following the SmartCity pattern
+        controller=Controller
+        'postFrequency' frequency=Frequency
+        'priority' priority=INT
     '}'
 ;
 
-// BACnet Objects - Follows the 'Sensor' pattern
 BacnetObject:
     'object' name=ID '{'
         'type' type=BacnetObjectType
         'instance' instanceNum=INT
-        'priority' priority=INT 
+        'priority' priority=INT
     '}'
 ;
 
-// Logic/Behavior Layer
-Action:
-    'action' name=ID '{'
-        'trigger' trigger=STRING
+Controller:
+    'controller' name=ID '{'
+        'type' type=ControllerType
+        'priority' priority=INT
+        // References for PyDEVS behavior logic
+        cyclicActions+=CyclicAction*
     '}'
 ;
 
-// Simulation Layer - Exactly matching your existing pattern
+// Simulation Properties specifically for PyDEVS
 SimulationProperties:
     'simulationProperties' '{'
         'terminationTime' terminationTime=INT
+        'syncInterval' syncInterval=INT // For real-time BACnet syncing
         ('generatorFile' generatorFile=STRING)?
     '}'
 ;
 
-enum BacnetObjectType:
-    ANALOG_INPUT | ANALOG_OUTPUT | ANALOG_VALUE | 
-    BINARY_INPUT | BINARY_OUTPUT | BINARY_VALUE
-;
+// Basic frequency and action rules from your original code
+Frequency: value=INT unit=FrequencyUnit;
+CyclicAction: 'cyclicAction' name=ID '{' 'frequency' frequency=Frequency '}';
+
+enum BacnetObjectType: ANALOG_INPUT | ANALOG_OUTPUT | BINARY_INPUT | BINARY_OUTPUT;
+enum ControllerType: ESP32 | RASPBERRY_PI | HVAC_CONTROLLER | OTHER;
+enum FrequencyUnit: HERTZ | SECONDS | MINUTES | HOURS | DAYS;

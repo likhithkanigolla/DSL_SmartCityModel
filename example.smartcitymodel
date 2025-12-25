@@ -1,0 +1,87 @@
+// Example BACnet HVAC DSL Model
+// This demonstrates a simple Daikin HVAC unit with BACnet objects
+
+network bacnet_network {
+    virtualClientIP "192.168.1.100"
+    port 47808
+}
+
+node daikin_hvac_unit1 {
+    ip "192.168.1.50"
+    vendor "Daikin"
+    
+    object temperature_sensor {
+        type ANALOG_INPUT
+        instance 1
+        priority 10
+    }
+    
+    object humidity_sensor {
+        type ANALOG_INPUT
+        instance 2
+        priority 10
+    }
+    
+    object setpoint_temp {
+        type ANALOG_OUTPUT
+        instance 1
+        priority 5
+    }
+    
+    object fan_status {
+        type BINARY_OUTPUT
+        instance 1
+        priority 8
+    }
+    
+    controller hvac_controller {
+        type HVAC_CONTROLLER
+        priority 1
+        
+        cyclicAction check_temperature {
+            frequency 5 SECONDS
+        }
+        
+        cyclicAction adjust_setpoint {
+            frequency 10 SECONDS
+        }
+    }
+    
+    postFrequency 1 SECONDS
+    priority 5
+}
+
+node daikin_hvac_unit2 {
+    ip "192.168.1.51"
+    vendor "Daikin"
+    
+    object temperature_sensor {
+        type ANALOG_INPUT
+        instance 1
+        priority 10
+    }
+    
+    object setpoint_temp {
+        type ANALOG_OUTPUT
+        instance 1
+        priority 5
+    }
+    
+    controller hvac_controller {
+        type HVAC_CONTROLLER
+        priority 1
+        
+        cyclicAction check_temperature {
+            frequency 5 SECONDS
+        }
+    }
+    
+    postFrequency 2 SECONDS
+    priority 5
+}
+
+simulationProperties {
+    terminationTime 300
+    syncInterval 1
+    generatorFile "data/hvac_data.csv"
+}

@@ -1,0 +1,29 @@
+// Simple test model
+network test_network {
+    virtualClientIP "192.168.1.100"
+    port 47808
+}
+
+node test_hvac {
+    ip "192.168.1.50"
+    vendor "Test"
+    
+    object temp_sensor {
+        type ANALOG_INPUT
+        instance 1
+        priority 10
+    }
+    
+    controller test_controller {
+        type HVAC_CONTROLLER
+        priority 1
+    }
+    
+    postFrequency 1 SECONDS
+    priority 5
+}
+
+simulationProperties {
+    terminationTime 60
+    syncInterval 1
+}
