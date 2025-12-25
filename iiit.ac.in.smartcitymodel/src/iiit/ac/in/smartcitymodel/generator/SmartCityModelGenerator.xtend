@@ -26,422 +26,502 @@ import iiit.ac.in.smartcitymodel.smartCityModel.Frequency
  */
 class SmartCityModelGenerator extends AbstractGenerator {
 
-	override void doGenerate(Resource resource, IFileSystemAccess2 fsa, IGeneratorContext context) {
-		resource.allContents
-			.filter(Model)
-			.forEach[model |
-				// Generate atomic models for each BACnet object
-				model.nodes.forEach[node |
-					node.bacnetObjects.forEach[bacnetObj |
-						fsa.generateFile("bacnet_objects/" + node.name + "_" + bacnetObj.name + ".py", 
-							generateBacnetObjectAtomic(node, bacnetObj))
-					]
-					// Generate node aggregator
-					fsa.generateFile("nodes/" + node.name + ".py", generateNodeAtomic(node))
-				]
-				
-				// Generate coupled model
-				fsa.generateFile("model.py", generateCoupledModel(model))
-				
-				// Generate experiment runner
-				fsa.generateFile("experiment.py", generateExperiment(model))
-				
-				// Generate BACnet communication layer
-				fsa.generateFile("layers/bacnet_interface.py", generateBacnetInterface(model))
-				
-				// Generate configuration
-				fsa.generateFile("config/bacnet_config.json", generateBacnetConfig(model))
-			]
-	}
-	
-	/**
-	 * Generate atomic DEVS model for a single BACnet object
-	 */
-	def String generateBacnetObjectAtomic(Node node, BacnetObject obj) '''
-		"""
-		Atomic DEVS model for BACnet Object: «obj.name»
-		Node: «node.name»
-		Type: «obj.type»
-		Instance: «obj.instanceNum»
-		"""
-		from pypdevs.DEVS import AtomicDEVS
-		from pypdevs.infinity import INFINITY
-		
-		class «node.name.toFirstUpper»_«obj.name.toFirstUpper»(AtomicDEVS):
-		    def __init__(self, name="«node.name»_«obj.name»"):
-		        super().__init__(name)
-		        
-		        # BACnet Object Properties
-		        self.object_type = "«obj.type»"
-		        self.instance_number = «obj.instanceNum»
-		        self.priority = «obj.priority»
-		        
-		        # State variables
-		        self.state = {
-		            "value": 0.0,
-		            "last_update": 0.0,
-		            "status": "OK"
-		        }
-		        
-		        # Ports
-		        self.inport = self.addInPort("in")
-		        self.outport = self.addOutPort("out")
-		        
-		        # Timing
-		        self.sigma = INFINITY
-		        self.processing_time = 0.1  # 100ms processing delay
-		    
-		    def intTransition(self):
-		        """Internal transition - process completed"""
-		        self.state["status"] = "READY"
-		        self.sigma = INFINITY
-		        return self.state
-		    
-		    def extTransition(self, inputs):
-		        """External transition - new data received"""
-		        self.sigma -= self.elapsed
-		        
-		        if self.inport in inputs:
-		            data = inputs[self.inport]
-		            self.state["value"] = data.get("value", self.state["value"])
-		            self.state["last_update"] = data.get("time", 0.0)
-		            self.state["status"] = "PROCESSING"
-		            self.sigma = self.processing_time
-		        
-		        return self.state
-		    
-		    def outputFnc(self):
-		        """Output function - send processed data"""
-		        return {
-		            self.outport: {
-		                "object_type": self.object_type,
-		                "instance": self.instance_number,
-		                "value": self.state["value"],
-		                "priority": self.priority,
-		                "status": self.state["status"]
-		            }
-		        }
-		    
-	    def timeAdvance(self):
-	        """Time advance - return current sigma"""
-	        return self.sigma
-	    
-	    def __lt__(self, other):
-	        """Comparison for PyPDEVS priority handling"""
-	        return self.priority < getattr(other, 'priority', 0)
-	'''
-	
-	/**
-	 * Generate node aggregator atomic model
-	 */
-	def String generateNodeAtomic(Node node) '''
-		"""
-		Node Aggregator for: «node.name»
-		IP: «node.deviceIP»
-		«IF node.vendor !== null»Vendor: «node.vendor»«ENDIF»
-		"""
-		from pypdevs.DEVS import AtomicDEVS
-		from pypdevs.infinity import INFINITY
-		
-		class «node.name.toFirstUpper»Node(AtomicDEVS):
-		    def __init__(self, name="«node.name»_node"):
-		        super().__init__(name)
-		        
-		        # Node properties
-		        self.device_ip = "«node.deviceIP»"
-		        «IF node.vendor !== null»
-		        self.vendor = "«node.vendor»"
-		        «ENDIF»
-		        self.priority = «node.priority»
-		        self.post_frequency = «frequencyToSeconds(node.frequency)»
-		        
-		        # Controller info
-		        self.controller_type = "«node.controller.type»"
-		        self.controller_priority = «node.controller.priority»
-		        
-		        # State
-		        self.state = {
-		            "aggregated_data": {},
-		            "last_post": 0.0,
-		            "status": "IDLE"
-		        }
-		        
-		        # Ports - one input for each BACnet object
-		        «FOR bacnetObj : node.bacnetObjects»
-		        self.«bacnetObj.name»_in = self.addInPort("«bacnetObj.name»_in")
-		        «ENDFOR»
-		        
-		        # Output to BACnet network
-		        self.network_out = self.addOutPort("network_out")
-		        
-		        # Timing
-		        self.sigma = self.post_frequency
-		    
-		    def intTransition(self):
-		        """Internal transition - time to post data"""
-		        self.state["last_post"] = self.state.get("current_time", 0.0)
-		        self.state["status"] = "POSTED"
-		        self.sigma = self.post_frequency
-		        return self.state
-		    
-		    def extTransition(self, inputs):
-		        """External transition - collect data from BACnet objects"""
-		        self.sigma -= self.elapsed
-		        
-		        # Aggregate data from all BACnet objects
-		        «FOR bacnetObj : node.bacnetObjects»
-		        if self.«bacnetObj.name»_in in inputs:
-		            self.state["aggregated_data"]["«bacnetObj.name»"] = inputs[self.«bacnetObj.name»_in]
-		        «ENDFOR»
-		        
-		        return self.state
-		    
-		    def outputFnc(self):
-		        """Output function - send aggregated data to network"""
-		        return {
-		            self.network_out: {
-		                "node": "«node.name»",
-		                "ip": self.device_ip,
-		                "data": self.state["aggregated_data"],
-		                "timestamp": self.state.get("current_time", 0.0)
-		            }
-		        }
-		    
-	    def timeAdvance(self):
-	        """Time advance"""
-	        return self.sigma
-	    
-	    def __lt__(self, other):
-	        """Comparison for PyPDEVS priority handling"""
-	        return self.priority < getattr(other, 'priority', 0)
-	'''
-	
-	/**
-	 * Generate coupled model
-	 */
-	def String generateCoupledModel(Model model) '''
-		"""
-		Coupled DEVS Model for BACnet HVAC Simulation
-		Generated from SmartCityModel DSL
-		"""
-		from pypdevs.DEVS import CoupledDEVS
-		
-		# Import BACnet object atomics
-		«FOR node : model.nodes»
-		«FOR bacnetObj : node.bacnetObjects»
-		from bacnet_objects.«node.name»_«bacnetObj.name» import «node.name.toFirstUpper»_«bacnetObj.name.toFirstUpper»
-		«ENDFOR»
-		«ENDFOR»
-		
-		# Import node aggregators
-		«FOR node : model.nodes»
-		from nodes.«node.name» import «node.name.toFirstUpper»Node
-		«ENDFOR»
-		
-		# Import BACnet interface
-		from layers.bacnet_interface import BACnetInterface
-		
-		class BACnetHVACModel(CoupledDEVS):
-		    def __init__(self, name="BACnetHVAC"):
-		        super().__init__(name)
-		        
-		        # Create BACnet objects
-		        «FOR node : model.nodes»
-		        # «node.name» BACnet objects
-		        «FOR bacnetObj : node.bacnetObjects»
-		        self.«node.name»_«bacnetObj.name» = self.addSubModel(«node.name.toFirstUpper»_«bacnetObj.name.toFirstUpper»())
-		        «ENDFOR»
-		        «ENDFOR»
-		        
-		        # Create node aggregators
-		        «FOR node : model.nodes»
-		        self.«node.name»_node = self.addSubModel(«node.name.toFirstUpper»Node())
-		        «ENDFOR»
-		        
-		        # Create BACnet interface
-		        self.bacnet_interface = self.addSubModel(BACnetInterface())
-		        
-		        # Connect BACnet objects to node aggregators
-		        «FOR node : model.nodes»
-		        # «node.name» connections
-		        «FOR bacnetObj : node.bacnetObjects»
-		        self.connectPorts(self.«node.name»_«bacnetObj.name».outport, 
-		                         self.«node.name»_node.«bacnetObj.name»_in)
-		        «ENDFOR»
-		        «ENDFOR»
-		        
-		        # Connect nodes to BACnet interface
-		        «FOR node : model.nodes»
-		        self.connectPorts(self.«node.name»_node.network_out, 
-		                         self.bacnet_interface.node_in)
-		        «ENDFOR»
-	'''
-	
-	/**
-	 * Generate experiment runner
-	 */
-	def String generateExperiment(Model model) '''
-		"""
-		PyDEVS Experiment Runner for BACnet HVAC Simulation
-		"""
-		from pypdevs.simulator import Simulator
-		from model import BACnetHVACModel
-		
-		def main():
-		    # Create model
-		    model = BACnetHVACModel()
-		    
-		    # Create simulator
-		    sim = Simulator(model)
-		    
-		    # Run simulation
-		    termination_time = «model.simulationProperties.terminationTime»
-		    print(f"Starting BACnet HVAC simulation for {termination_time} seconds...")
-		    
-		    sim.setTerminationTime(termination_time)
-		    sim.setClassicDEVS()
-		    sim.simulate()
-		    
-		    print("Simulation completed.")
-		
-		if __name__ == "__main__":
-		    main()
-	'''
-	
-	/**
-	 * Generate BACnet interface layer
-	 */
-	def String generateBacnetInterface(Model model) '''
-		"""
-		BACnet Communication Interface for Physical System Integration
-		"""
-		from pypdevs.DEVS import AtomicDEVS
-		from pypdevs.infinity import INFINITY
-		import json
-		
-		class BACnetInterface(AtomicDEVS):
-		    def __init__(self, name="BACnet_Interface"):
-		        super().__init__(name)
-		        
-	        # Network configuration
-	        self.networks = {
-	            «FOR network : model.networks SEPARATOR ','»
-	            "«network.name»": {
-	                "virtual_ip": "«network.virtualIP»",
-	                "port": «network.port»
-	            }
-	            «ENDFOR»
-	        }		        self.sync_interval = «model.simulationProperties.syncInterval»
-		        
-		        # State
-		        self.state = {
-		            "buffer": [],
-		            "last_sync": 0.0
-		        }
-		        
-		        # Ports
-		        self.node_in = self.addInPort("node_in")
-		        self.network_out = self.addOutPort("network_out")
-		        
-		        self.sigma = self.sync_interval
-		    
-		    def intTransition(self):
-		        """Sync with physical BACnet devices"""
-		        # TODO: Implement actual BACnet communication
-		        self.state["buffer"] = []
-		        self.sigma = self.sync_interval
-		        return self.state
-		    
-		    def extTransition(self, inputs):
-		        """Receive data from nodes"""
-		        self.sigma -= self.elapsed
-		        
-		        if self.node_in in inputs:
-		            self.state["buffer"].append(inputs[self.node_in])
-		        
-		        return self.state
-		    
-		    def outputFnc(self):
-		        """Send buffered data"""
-		        return {
-		            self.network_out: {
-		                "data": self.state["buffer"],
-		                "networks": self.networks
-		            }
-		        }
-		    
-	    def timeAdvance(self):
-	        return self.sigma
-	    
-	    def __lt__(self, other):
-	        """Comparison for PyPDEVS priority handling"""
-	        return True  # Interface has lowest priority
-	'''
-	
-	/**
-	 * Generate BACnet configuration file
-	 */
-	def String generateBacnetConfig(Model model) '''
-		{
-		    "networks": [
-		        «FOR network : model.networks SEPARATOR ','»
-		        {
-		            "name": "«network.name»",
-		            "virtual_ip": «network.virtualIP»,
-		            "port": «network.port»
-		        }
-		        «ENDFOR»
-		    ],
-		    "nodes": [
-		        «FOR node : model.nodes SEPARATOR ','»
-		        {
-		            "name": "«node.name»",
-		            "device_ip": "«node.deviceIP»",
-		            «IF node.vendor !== null»
-		            "vendor": "«node.vendor»",
-		            «ENDIF»
-		            "priority": «node.priority»,
-		            "post_frequency": «frequencyToSeconds(node.frequency)»,
-		            "controller": {
-		                "name": "«node.controller.name»",
-		                "type": "«node.controller.type»",
-		                "priority": «node.controller.priority»
-		            },
-		            "bacnet_objects": [
-		                «FOR bacnetObj : node.bacnetObjects SEPARATOR ','»
-		                {
-		                    "name": "«bacnetObj.name»",
-		                    "type": "«bacnetObj.type»",
-		                    "instance": «bacnetObj.instanceNum»,
-		                    "priority": «bacnetObj.priority»
-		                }
-		                «ENDFOR»
-		            ]
-		        }
-		        «ENDFOR»
-		    ],
-		    "simulation": {
-		        "termination_time": «model.simulationProperties.terminationTime»,
-		        "sync_interval": «model.simulationProperties.syncInterval»
-		        «IF model.simulationProperties.generatorFile !== null»
-		        ,"generator_file": «model.simulationProperties.generatorFile»
-		        «ENDIF»
-		    }
-		}
-	'''
-	
-	/**
-	 * Convert frequency to seconds
-	 */
-	def double frequencyToSeconds(Frequency freq) {
-		val value = freq.value
-		switch freq.unit {
-			case HERTZ: 1.0 / value
-			case SECONDS: value
-			case MINUTES: value * 60
-			case HOURS: value * 3600
-			case DAYS: value * 86400
-			default: value
-		}
-	}
+    override void doGenerate(Resource resource, IFileSystemAccess2 fsa, IGeneratorContext context) {
+        resource.allContents
+            .filter(Model)
+            .forEach[model |
+                // Generate atomic models for each BACnet object
+                model.nodes.forEach[node |
+                    node.bacnetObjects.forEach[bacnetObj |
+                        fsa.generateFile("bacnet_objects/" + node.name + "_" + bacnetObj.name + ".py", 
+                            generateBacnetObjectAtomic(node, bacnetObj))
+                    ]
+                    // Generate node aggregator
+                    fsa.generateFile("nodes/" + node.name + ".py", generateNodeAtomic(node))
+                ]
+                
+                // Generate coupled model
+                fsa.generateFile("model.py", generateCoupledModel(model))
+                
+                // Generate experiment runner
+                fsa.generateFile("experiment.py", generateExperiment(model))
+                
+                // Generate BACnet communication layer
+                fsa.generateFile("layers/bacnet_interface.py", generateBacnetInterface(model))
+                
+                // Generate configuration
+                fsa.generateFile("config/bacnet_config.json", generateBacnetConfig(model))
+                
+                // Generate temperature generator
+                fsa.generateFile("generators/temp_generator.py", generateTempGenerator())
+            ]
+    }
+    
+    /**
+     * Generate atomic DEVS model for a single BACnet object
+     */
+    def String generateBacnetObjectAtomic(Node node, BacnetObject obj) '''
+        """
+        Atomic DEVS model for BACnet Object: «obj.name»
+        Node: «node.name»
+        Type: «obj.type»
+        Instance: «obj.instanceNum»
+        """
+        from pypdevs.DEVS import AtomicDEVS
+        from pypdevs.infinity import INFINITY
+        
+        class «node.name.toFirstUpper»_«obj.name.toFirstUpper»(AtomicDEVS):
+            def __init__(self, name="«node.name»_«obj.name»"):
+                super().__init__(name)
+                
+                # BACnet Object Properties
+                self.object_type = "«obj.type»"
+                self.instance_number = «obj.instanceNum»
+                self.priority = «obj.priority»
+                
+                # State variables
+                self.state = {
+                    "value": 0.0,
+                    "last_update": 0.0,
+                    "status": "OK"
+                }
+                
+                # Ports
+                self.inport = self.addInPort("in")
+                self.outport = self.addOutPort("out")
+                
+                # Timing
+                self.sigma = INFINITY
+                self.processing_time = 0.1  # 100ms processing delay
+            
+            def intTransition(self):
+                """Internal transition - process completed"""
+                self.state["status"] = "READY"
+                self.sigma = INFINITY
+                return self.state
+            
+            def extTransition(self, inputs):
+                """External transition - new data received"""
+                self.sigma -= self.elapsed
+                
+                if self.inport in inputs:
+                    data = inputs[self.inport]
+                    self.state["value"] = data.get("value", self.state["value"])
+                    self.state["last_update"] = data.get("time", 0.0)
+                    self.state["status"] = "PROCESSING"
+                    self.sigma = self.processing_time
+                
+                return self.state
+            
+            def outputFnc(self):
+                """Output function - send processed data"""
+                output_data = {
+                    "object_type": self.object_type,
+                    "instance": self.instance_number,
+                    "value": self.state["value"],
+                    "priority": self.priority,
+                    "status": self.state["status"]
+                }
+                print(f"[{self.name}] Output - Sending: {output_data}")
+                return {self.outport: output_data}
+            
+            def timeAdvance(self):
+                """Time advance - return current sigma"""
+                return self.sigma
+            
+            def __lt__(self, other):
+                """Comparison for PyPDEVS priority handling"""
+                return self.priority < getattr(other, 'priority', 0)
+    '''
+    
+    /**
+     * Generate node aggregator atomic model
+     */
+    def String generateNodeAtomic(Node node) '''
+        """
+        Node Aggregator for: «node.name»
+        IP: «node.deviceIP»
+        «IF node.vendor !== null»Vendor: «node.vendor»«ENDIF»
+        """
+        from pypdevs.DEVS import AtomicDEVS
+        from pypdevs.infinity import INFINITY
+        
+        class «node.name.toFirstUpper»Node(AtomicDEVS):
+            def __init__(self, name="«node.name»_node"):
+                super().__init__(name)
+                
+                # Node properties
+                self.device_ip = "«node.deviceIP»"
+                «IF node.vendor !== null»
+                self.vendor = "«node.vendor»"
+                «ENDIF»
+                self.priority = «node.priority»
+                self.post_frequency = «frequencyToSeconds(node.frequency)»
+                
+                # Controller info
+                self.controller_type = "«node.controller.type»"
+                self.controller_priority = «node.controller.priority»
+                
+                # State
+                self.state = {
+                    "aggregated_data": {},
+                    "last_post": 0.0,
+                    "status": "IDLE"
+                }
+                
+                # Ports - one input for each BACnet object
+                «FOR bacnetObj : node.bacnetObjects»
+                self.«bacnetObj.name»_in = self.addInPort("«bacnetObj.name»_in")
+                «ENDFOR»
+                
+                # Output to BACnet network
+                self.network_out = self.addOutPort("network_out")
+                
+                # Timing
+                self.sigma = self.post_frequency
+            
+            def intTransition(self):
+                """Internal transition - time to post data"""
+                self.state["last_post"] = self.state.get("current_time", 0.0)
+                self.state["status"] = "POSTED"
+                self.sigma = self.post_frequency
+                return self.state
+            
+            def extTransition(self, inputs):
+                """External transition - collect data from BACnet objects"""
+                self.sigma -= self.elapsed
+                
+                # Aggregate data from all BACnet objects
+                «FOR bacnetObj : node.bacnetObjects»
+                if self.«bacnetObj.name»_in in inputs:
+                    self.state["aggregated_data"]["«bacnetObj.name»"] = inputs[self.«bacnetObj.name»_in]
+                «ENDFOR»
+                
+                return self.state
+            
+            def outputFnc(self):
+                """Output function - send aggregated data to network"""
+                output_data = {
+                    "node": "«node.name»",
+                    "ip": self.device_ip,
+                    "data": self.state["aggregated_data"],
+                    "timestamp": self.state.get("current_time", 0.0)
+                }
+                print(f"[{self.name}] Output - Sending to BACnet interface: {output_data}")
+                return {self.network_out: output_data}
+            
+            def timeAdvance(self):
+                """Time advance"""
+                return self.sigma
+            
+            def __lt__(self, other):
+                """Comparison for PyPDEVS priority handling"""
+                return self.priority < getattr(other, 'priority', 0)
+    '''
+    
+    /**
+     * Generate coupled model
+     */
+    def String generateCoupledModel(Model model) '''
+        """
+        Coupled DEVS Model for BACnet HVAC Simulation
+        Generated from SmartCityModel DSL
+        """
+        from pypdevs.DEVS import CoupledDEVS
+        
+        # Import BACnet object atomics
+        «FOR node : model.nodes»
+        «FOR bacnetObj : node.bacnetObjects»
+        from bacnet_objects.«node.name»_«bacnetObj.name» import «node.name.toFirstUpper»_«bacnetObj.name.toFirstUpper»
+        «ENDFOR»
+        «ENDFOR»
+        
+        # Import node aggregators
+        «FOR node : model.nodes»
+        from nodes.«node.name» import «node.name.toFirstUpper»Node
+        «ENDFOR»
+        
+        # Import BACnet interface
+        from layers.bacnet_interface import BACnetInterface
+        
+        # Import generator
+        from generators.temp_generator import TempGenerator
+        
+        class BACnetHVACModel(CoupledDEVS):
+            def __init__(self, name="BACnetHVAC"):
+                super().__init__(name)
+                
+                # Create generator to simulate sensor input
+                self.temp_generator = self.addSubModel(TempGenerator())
+                
+                # Create BACnet objects
+                «FOR node : model.nodes»
+                # «node.name» BACnet objects
+                «FOR bacnetObj : node.bacnetObjects»
+                self.«node.name»_«bacnetObj.name» = self.addSubModel(«node.name.toFirstUpper»_«bacnetObj.name.toFirstUpper»())
+                «ENDFOR»
+                «ENDFOR»
+                
+                # Create node aggregators
+                «FOR node : model.nodes»
+                self.«node.name»_node = self.addSubModel(«node.name.toFirstUpper»Node())
+                «ENDFOR»
+                
+                # Create BACnet interface
+                self.bacnet_interface = self.addSubModel(BACnetInterface())
+                
+                # Connect generator to temp sensor
+                «val firstNode = model.nodes.head»
+                «val firstSensor = firstNode?.bacnetObjects?.head»
+                «IF firstSensor !== null»
+                self.connectPorts(self.temp_generator.outport,
+                                 self.«firstNode.name»_«firstSensor.name».inport)
+                «ENDIF»
+                
+                # Connect BACnet objects to node aggregators
+                «FOR node : model.nodes»
+                # «node.name» connections
+                «FOR bacnetObj : node.bacnetObjects»
+                self.connectPorts(self.«node.name»_«bacnetObj.name».outport, 
+                                 self.«node.name»_node.«bacnetObj.name»_in)
+                «ENDFOR»
+                «ENDFOR»
+                
+                # Connect nodes to BACnet interface
+                «FOR node : model.nodes»
+                self.connectPorts(self.«node.name»_node.network_out, 
+                                 self.bacnet_interface.node_in)
+                «ENDFOR»
+    '''
+    
+    /**
+     * Generate experiment runner
+     */
+    def String generateExperiment(Model model) '''
+        """
+        PyDEVS Experiment Runner for BACnet HVAC Simulation
+        """
+        from pypdevs.simulator import Simulator
+        from model import BACnetHVACModel
+        
+        def main():
+            # Create model
+            model = BACnetHVACModel()
+            
+            # Create simulator
+            sim = Simulator(model)
+            
+            # Run simulation
+            termination_time = «model.simulationProperties.terminationTime»
+            print(f"Starting BACnet HVAC simulation for {termination_time} seconds...")
+            
+            sim.setTerminationTime(termination_time)
+            sim.setClassicDEVS()
+            sim.simulate()
+            
+            print("Simulation completed.")
+        
+        if __name__ == "__main__":
+            main()
+    '''
+    
+    /**
+     * Generate BACnet interface layer
+     */
+    def String generateBacnetInterface(Model model) '''
+        """
+        BACnet Communication Interface for Physical System Integration
+        """
+        from pypdevs.DEVS import AtomicDEVS
+        from pypdevs.infinity import INFINITY
+        import json
+        
+        class BACnetInterface(AtomicDEVS):
+            def __init__(self, name="BACnet_Interface"):
+                super().__init__(name)
+                
+                # Network configuration
+                self.networks = {
+                    «FOR network : model.networks SEPARATOR ','»
+                    "«network.name»": {
+                        "virtual_ip": "«network.virtualIP»",
+                        "port": «network.port»
+                    }
+                    «ENDFOR»
+                }
+            
+                self.sync_interval = «model.simulationProperties.syncInterval»
+                
+                # State
+                self.state = {
+                    "buffer": [],
+                    "last_sync": 0.0
+                }
+                
+                # Ports
+                self.node_in = self.addInPort("node_in")
+                self.network_out = self.addOutPort("network_out")
+                
+                self.sigma = self.sync_interval
+            
+            def intTransition(self):
+                """Sync with physical BACnet devices"""
+                # TODO: Implement actual BACnet communication
+                self.state["buffer"] = []
+                self.sigma = self.sync_interval
+                return self.state
+            
+            def extTransition(self, inputs):
+                """Receive data from nodes"""
+                self.sigma -= self.elapsed
+                
+                if self.node_in in inputs:
+                    self.state["buffer"].append(inputs[self.node_in])
+                
+                return self.state
+            
+            def outputFnc(self):
+                """Send buffered data"""
+                print(f"[{self.name}] Output - Broadcasting {len(self.state['buffer'])} items to BACnet networks")
+                return {
+                    self.network_out: {
+                        "data": self.state["buffer"],
+                        "networks": self.networks
+                    }
+                }
+            
+            def timeAdvance(self):
+                return self.sigma
+            
+            def __lt__(self, other):
+                """Comparison for PyPDEVS priority handling"""
+                return True  # Interface has lowest priority
+    '''
+    
+    /**
+     * Generate BACnet configuration file
+     */
+    def String generateBacnetConfig(Model model) '''
+        {
+            "networks": [
+                «FOR network : model.networks SEPARATOR ','»
+                {
+                    "name": "«network.name»",
+                    "virtual_ip": «network.virtualIP»,
+                    "port": «network.port»
+                }
+                «ENDFOR»
+            ],
+            "nodes": [
+                «FOR node : model.nodes SEPARATOR ','»
+                {
+                    "name": "«node.name»",
+                    "device_ip": "«node.deviceIP»",
+                    «IF node.vendor !== null»
+                    "vendor": "«node.vendor»",
+                    «ENDIF»
+                    "priority": «node.priority»,
+                    "post_frequency": «frequencyToSeconds(node.frequency)»,
+                    "controller": {
+                        "name": "«node.controller.name»",
+                        "type": "«node.controller.type»",
+                        "priority": «node.controller.priority»
+                    },
+                    "bacnet_objects": [
+                        «FOR bacnetObj : node.bacnetObjects SEPARATOR ','»
+                        {
+                            "name": "«bacnetObj.name»",
+                            "type": "«bacnetObj.type»",
+                            "instance": «bacnetObj.instanceNum»,
+                            "priority": «bacnetObj.priority»
+                        }
+                        «ENDFOR»
+                    ]
+                }
+                «ENDFOR»
+            ],
+            "simulation": {
+                "termination_time": «model.simulationProperties.terminationTime»,
+                "sync_interval": «model.simulationProperties.syncInterval»
+                «IF model.simulationProperties.generatorFile !== null»
+                ,"generator_file": «model.simulationProperties.generatorFile»
+                «ENDIF»
+            }
+        }
+    '''
+    
+    /**
+     * Generate temperature generator for simulation input
+     */
+    def String generateTempGenerator() '''
+        """
+        Generator model to simulate temperature sensor readings
+        """
+        from pypdevs.DEVS import AtomicDEVS
+        import random
+        
+        class TempGenerator(AtomicDEVS):
+            def __init__(self, name="temp_generator"):
+                super().__init__(name)
+                
+                # Output port
+                self.outport = self.addOutPort("out")
+                
+                # State
+                self.state = {
+                    "temperature": 22.0,  # Starting temperature in Celsius
+                    "time": 0.0
+                }
+                
+                # Generate new reading every 5 seconds
+                self.sigma = 0.0  # Start immediately
+                self.generation_interval = 5.0
+            
+            def intTransition(self):
+                """Internal transition - generate next temperature reading"""
+                # Simulate temperature fluctuation (±2 degrees)
+                self.state["temperature"] += random.uniform(-0.5, 0.5)
+                self.state["temperature"] = max(18.0, min(26.0, self.state["temperature"]))  # Keep in range
+                self.state["time"] += self.generation_interval
+                self.sigma = self.generation_interval
+                print(f"[{self.name}] Generated new temperature: {self.state['temperature']:.2f}°C")
+                return self.state
+            
+            def extTransition(self, inputs):
+                """External transition - not used"""
+                self.sigma -= self.elapsed
+                return self.state
+            
+            def outputFnc(self):
+                """Output function - send temperature reading"""
+                return {
+                    self.outport: {
+                        "value": self.state["temperature"],
+                        "time": self.state["time"]
+                    }
+                }
+            
+            def timeAdvance(self):
+                """Time advance"""
+                return self.sigma
+            
+            def __lt__(self, other):
+                """Comparison for PyPDEVS priority handling"""
+                return True  # Generator has highest priority
+    '''
+    
+    /**
+     * Convert frequency to seconds
+     */
+    def double frequencyToSeconds(Frequency freq) {
+        val value = freq.value
+        switch freq.unit {
+            case HERTZ: 1.0 / value
+            case SECONDS: value
+            case MINUTES: value * 60
+            case HOURS: value * 3600
+            case DAYS: value * 86400
+            default: value
+        }
+    }
 }
